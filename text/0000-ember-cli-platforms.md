@@ -4,7 +4,7 @@
 
 # Summary
 
-`ember-cli-platforms` treats platforms as build targets, and gives you a
+The ember-cli platform flag treats platforms as build targets, and gives you a
 workflow for producing builds customized to a platform, as well as streamlined tooling,
 enhanced resuability, and better separation of concerns for applications that
 target more than one platform.  Platforms are roughly equivalent to web views,
@@ -21,32 +21,6 @@ ease the building of addons specific to a platform by enabling ember-cli to unde
 the existence of platforms and how various assets relate to them.
 
 # Detailed design
-
-## Installation
-
-- `ember install ember-cli-platforms`
-
-## Plugins
-
-Platform addons should also implement a default deployment process for ember-cli-deploy.
-Custom deployments (such as to phonegap-build or cloudfive or Telerik) should be their
-own addons.
-
-- [Cordova]() `ember install ember-cli-platform-cordova`
-- [Crosswalk]() `ember install ember-cli-platform-crosswalk`
-- [Chrome]() `ember install ember-cli-platform-chrome`
-- [Firefox]() `ember install ember-cli-platform-firefox`
-- [MacGap]() `ember install ember-cli-platform-macgap`
-- [CEF]() `ember install ember-cli-platform-cef`
-
-**Advanced Usage**
-
-The following plugins are available for advanced user. These platforms
-come with [security risks]() you should understand before you choose them.
-
-- [Electron]() `ember install ember-cli-platform-electron`
-- [NW.js]() `ember install ember-cli-platform-nwjs`
-
 
 ## Usage
 
@@ -80,41 +54,41 @@ shorthands for those methods as well.
 
 **Serve a specific platform.**
 ```cli
-ember p:s <type>[-<name>]
+ember s -p "<type>[-<name>]"
 ```
 
 This is shorthand for:
 ```cli
-ember platform:serve --platform="<type>" [--target="<name>"] --environment="development"
+ember serve --platform="<type>" [--target="<name>"] --environment="development"
 ```
 
 **Build a specific platform.**
 ```cli
-ember p:b <type>[-<name>]
+ember b -p "<type>[-<name>]"
 ```
 
 **Test a specific platform.**
 ```cli
-ember p:t <type>[-<name>] <deployTarget>
+ember t -p "<type>[-<name>]"
 ```
 
 **Deploy a specific platform.**
 ```cli
-ember p:d <type>[-<name>] <deployTarget>
+ember d <deployTarget> -p "<type>[-<name>]" 
 ```
 
 This is short hand for:
 ```cli
-ember platform:deploy --platform="<type>" [--target="<name>"] --deployTarget="<deployTarget>" --environment="development"
+ember deploy --deployTarget="<deployTarget>" --platform="<type>" [--target="<name>"] --environment="development"
 ```
 
 
 ### Platform Specific Code
 
-`ember-cli-platforms` leverages in-repo-addon semantics and Broccoli plugins to enable
-you to sprinkle platform specific code into your app as needed with "platform addons".
+Platforms would leverage in-repo-addon semantics and Broccoli plugins to enable
+sprinkling of platform specific code into an app as needed with "platform addons".
 
-A platform addon is generated automatically for each platform you create with `ember platform`.
+A platform addon is generated automatically for each platform created with `ember platform`.
 
 ```
 <project>
@@ -122,11 +96,11 @@ A platform addon is generated automatically for each platform you create with `e
     /<type>[-<name>]
 ```
 
-These "addons" function differently from normal addons. Instead of code in the app overriding or importing
-code from the addon, the addon take precedence.  This let's you selectively replace or add entire modules
-as needed.
+These "addons" function differently from normal addons, and would be prefixed with `-platform-`.
+Instead of code in the app overriding or importing code from the addon, the addon would 
+take precedence.  This let's you selectively replace or add entire modules as needed.
 
-You can import the `app` version of a module into the addon.
+You can import the corresponding `app` version of a module into the platform addon.
 
 ```js
 import Foo from '<project-name>/routes/foo';
@@ -149,21 +123,25 @@ A platform config file is generated automatically for each platform you create w
 
 This configuration will be merged with your primary configuration.
 
+## Plugins
+
+Users should be able to create platform plugins as addons which implement 
+any number of specified hooks. These plugins should carry in the same tradition
+in form, function and hook names as `ember-cli-deploy`.
 
 ## Creating Plugins
 
-`ember-cli-platforms` has two forms of plugins:
+Platforms have several forms of plugins:
 
-1. `process hooks` which add behaviors to ember-cli-platforms.
-2. `platform plugins` which implement support for a specific platform.
-3. `deploy plugins` which implement support for deployment
+1. `process hooks` which add behaviors to one or more platforms.
+2. `platform plugins` which implement support and generators for a specific platform.
+3. `deploy plugins` which implement support for deployment of a platform.
 
 Platform plugins (generally) are also process hooks.
 
 ## All plugins
 
-ember-cli-platforms plugins are nothing more than standard ember-cli addons
-with 3 small ember-cli-platforms specific traits:
+Platform plugins are ember-cli addons with a few platform specific traits:
 
 1. they contain a package.json keyword to identify them as plugins
 2. they are named ember-cli-platform-*
@@ -320,6 +298,7 @@ solutions.
 The following concerns will need to be fleshed out to properly provide
 an abstract process for each platform to be able to utilize.
 
+- where do we put the (static) config for the commandName?
 - ember serve doesn't resolve promise when serving, nw.js had to hook it
 - testing: run tests within the deployment target
   - view based tests
