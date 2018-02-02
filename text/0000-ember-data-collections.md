@@ -31,6 +31,10 @@ methods in addition to `meta`, `links` and `toArray()`.  The sad reality is that
  endorsed semi-sane way of interacting with the record-array, although it forks the array at the call-point
  leading developers to lose the ability to respond to or make updates appropriately. This negates the
  benefits of `lazy-materialization` when relied upon, as it often is.
+ 
+`RecordArray.toArray()` creates a divergence in the API, as developers must now reason about whether they
+  are interacting with a `RecordArray` or the result of calling `toArray()` and similarly must devine 
+  whether this means `meta` and `links` are available to them or not.
 
 One of the more frustrating aspects of `store.query` is all calls to it bypass the cache, yet it is the
 only method by which to make a request for a specific collection today via a store that touts caching as
