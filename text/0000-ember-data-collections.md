@@ -20,8 +20,8 @@ In the case of `store.query`, `meta` and `links` from the response are available
 but only `meta` is proxied to the `PromiseArray`.  Folks reach into `PromiseArray.content` to get access
 improperly because they do not understand what it is but it "seems to work in templates".
 
-`AdapterPopulatedRecordArray` and `RecordArray` which it extends are both extend `Ember.ArrayProxy`,
-and their content, instead of being an array of records, is an array of `InternalModel`s. A private
+`AdapterPopulatedRecordArray` and `RecordArray`, which it extends, both extend `Ember.ArrayProxy`.
+Their content, instead of being an array of records, is an array of `InternalModel`s. A private
 construct. Ember-data uses the `objectAt` method to lazily materialize the records for these internal-models
 on access.  This is another very confusing thing, even if good for perf.
 
