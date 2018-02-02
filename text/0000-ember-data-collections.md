@@ -8,11 +8,49 @@
 
 ## Summary
 
-New apis that replace the existing `store.findAll` and `store.query` methods to 
- enable better fetch, update, pagination and cache management of collection
- API endpoints in ember-data.
+Improve the ergonomics of fetching and operating on collection endpoints in ember-data.
 
 ## Motivation
+
+In `ember-data` today, arrays of records are typically fetched from an API via either `store.query`
+or `store.findAll`.  These methods both return a `PromiseArray` wrapping either a `RecordArray` in
+the case of `store.findAll` or an `AdapterPopulatedRecordArray` in the case of `query`.
+
+In the case of `store.query`, `meta` and `links` from the response are available on the `RecordArray`,
+but only `meta` is proxied to the `PromiseArray`.  Folks reach into `PromiseArray.content` to get access
+improperly because they do not understand what it is but it "seems to work in templates".
+
+`AdapterPopulatedRecordArray` and `RecordArray` which it extends are both extend `Ember.ArrayProxy`,
+and their content, instead of being an array of records, is an array of `InternalModel`s. A private
+construct. Ember-data uses the `objectAt` method to lazily materialize the records for these internal-models
+on access.  This is another very confusing thing, even if good for perf.
+
+Adding to the confusion, these classes contain many public-looking-but-actually-private properties and
+methods in addition to `meta`, `links` and `toArray()`.  The sad reality is that `toArray()` is the only
+ endorsed semi-sane way of interacting with the record-array, although it forks the array at the call-point
+ leading developers to lose the ability to respond to or make updates appropriately. This negates the
+ benefits of `lazy-materialization` when relied upon, as it often is.
+
+One of the more frustrating aspects of `store.query` is all calls to it bypass the cache, yet it is the
+only method by which to make a request for a specific collection today via a store that touts caching as
+ its selling point.  `store.query` is also the mandatory method to use if you want access to `links` and
+`meta`.
+
+The alternative to `store.query`, `store.findAll` comes with its own set of caveats.
+
+For starters, it returns the `live-array` result of `store.peekAll`, meaning that all known records of a
+ type are included, in random order, regardless of state.  Effectively, this makes the result of a request
+  via `store.findAll` useless without an array computed and using `RecordArray.toArray().filter(() => {})`.
+  This negates the benefits of the `live-array` as well as of `lazy-materialization` when relied upon,
+  as it often is.
+
+`store.findAll` also cannot support `meta` and `links` and poorly supports `pagination`, because it is the agglomeration
+ of all requests for records of a specific `type` via any find method or local creation.
+
+Altogether, these issues make managing arrays of records one of the more painful ergonomic and performance experiences 
+in `ember-data` today.
+
+So why this particular solution?
 
 - aligning usage more closely with json-api principles enables us to provide more robust primitives
 - findAll meta / pagination / integrity problems
@@ -21,7 +59,7 @@ New apis that replace the existing `store.findAll` and `store.query` methods to
   are difficult to reason about and debug, and surprise
   folks by not being "just arrays".
 - separate the fetch from the current data
-- enable more advanced patterns, improve flexibility
+- enable more advanced patterns, improve flexibility (membership, pagination, caching, meta)
 - pave a path for improvements and simplifications across ember-data in single-resource and
   relationship layer as well
 
@@ -167,6 +205,8 @@ so well thought out!
 
 ## Unresolved questions
 
+- References vs Resources and mixing them for operations
+- Record materialization
 - should we cleanup the relationship layer first (ala https://github.com/emberjs/data/pull/4882)
 - should `collection()` descriptor come as a separate RFC?
 - should `buildURL()` helper come as a separate RFC, potentially as `store.buildURL`? 
