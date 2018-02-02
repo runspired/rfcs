@@ -18,7 +18,8 @@ the case of `store.findAll` or an `AdapterPopulatedRecordArray` in the case of `
 
 In the case of `store.query`, `meta` and `links` from the response are available on the `RecordArray`,
 but only `meta` is proxied to the `PromiseArray`.  Folks reach into `PromiseArray.content` to get access
-improperly because they do not understand what it is but it "seems to work in templates".
+to the `RecordArray` improperly, because they do not understand the async nature of this proxy but notice
+ that it "seems to just work in templates".
 
 `AdapterPopulatedRecordArray` and `RecordArray`, which it extends, both extend `Ember.ArrayProxy`.
 Their content, instead of being an array of records, is an array of `InternalModel`s. A private
