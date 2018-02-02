@@ -47,6 +47,8 @@ For starters, it returns the `live-array` result of `store.peekAll`, meaning tha
 `store.findAll` also cannot support `meta` and `links` and poorly supports `pagination`, because it is the agglomeration
  of all requests for records of a specific `type` via any find method or local creation.
 
+**TODO issues with updating arrays and/or manipulating array order**
+
 Altogether, these issues make managing arrays of records one of the more painful ergonomic and performance experiences 
 in `ember-data` today.
 
@@ -139,9 +141,11 @@ collections {
 
 ### Busting the Cache
 
-
+**TODO**
 
 ## How we teach this
+
+**TODO**
 
 > What names and terminology work best for these concepts and why? How is this
 idea best presented? As a continuation of existing Ember patterns, or as a
@@ -186,7 +190,8 @@ API)
  - `PromiseArray`
  - `RecordArrayManager`
  
- Internally, `CollectionManager` would replace `RecordArrayManager` to fulfill new requirements.
+ Internally, `CollectionManager` would replace `RecordArrayManager` to fulfill new requirements. Instead of `RecordArray`
+ we would ideally just use arrays; however, questions regarding lazy-materialization must be answered first.
  
 #### JSON-API
 
@@ -206,7 +211,8 @@ so well thought out!
 ## Unresolved questions
 
 - References vs Resources and mixing them for operations
-- Record materialization
+- Record materialization (currently lazy). Can we make it not-lazy now that there are paths for pushing data into the
+  store without requiring materialization? Should we explicitly make a public thing for the array (`Identifier`) instead?
 - should we cleanup the relationship layer first (ala https://github.com/emberjs/data/pull/4882)
 - should `collection()` descriptor come as a separate RFC?
 - should `buildURL()` helper come as a separate RFC, potentially as `store.buildURL`? 
