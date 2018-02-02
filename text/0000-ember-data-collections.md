@@ -78,8 +78,6 @@ So why this particular solution?
 
 `queryURL` would return a `Document` (potentially a document presenting as a `Collection`).
 
-`store.buildURL()`
-
 ### Associated Classes
 
 `Document`
@@ -220,7 +218,7 @@ so well thought out!
   store without requiring materialization? Should we explicitly make a public thing for the array (`Identifier`) instead?
 - should we cleanup the relationship layer first (ala https://github.com/emberjs/data/pull/4882)
 - should `collection()` descriptor come as a separate RFC?
-- should `buildURL()` helper come as a separate RFC, potentially as `store.buildURL`? 
+- RFC for `buildURL()` potentially as `store.buildURL`, helper and how to use it to provide a url to `store.queryURL`
 - should we fast follow with an RFC for similarly cleaning up `belongsTo` and single
   resources to ensure that these APIs move to a nice future together in step?
 - should `queryURL` only work for collections initially to avoid questions about
