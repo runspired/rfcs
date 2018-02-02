@@ -6,16 +6,9 @@
 
 **This RFC should be considered the roughest of rough drafts**
 
-Also note, it currently contains references MANY MANY more changes than it will
-ultimately propose. Ultimately, we want relationships and find methods for both
-single resources and collections to have consistent APIs. However, such a large
-scope of changes is greater than one RFC, and it is most likely the smartest course
-of action to start small with just introducing collections and then moving to 
-enhance single-resources and finally updating relationships to have matching semantics.
-
 ## Summary
 
-New apis that replace the existing `find` methods and `hasMany` descriptor to 
+New apis that replace the existing `store.findAll` and `store.query` methods to 
  enable better fetch, update, pagination and cache management of collection
  API endpoints in ember-data.
 
@@ -24,17 +17,13 @@ New apis that replace the existing `find` methods and `hasMany` descriptor to
 - aligning usage more closely with json-api principles enables us to provide more robust primitives
 - findAll meta / pagination / integrity problems
 - query pagination and cache problems
-- hasMany pagination problems
-- hasMany fetching problems
-- hasMany / recordArray order manipulation struggles
-- hasMany / recordArray membership struggles
-- improve our ability to refactor and cleanup the relationship layer
 - RecordArray, ManyArray, and their various proxies
   are difficult to reason about and debug, and surprise
   folks by not being "just arrays".
 - separate the fetch from the current data
 - enable more advanced patterns, improve flexibility
-- fix several `hasMany` API constraints such as implicit inverses and auto-fetch
+- pave a path for improvements and simplifications across ember-data in single-resource and
+  relationship layer as well
 
 ## Detailed design
 
@@ -43,6 +32,40 @@ New apis that replace the existing `find` methods and `hasMany` descriptor to
 `store.queryURL(cacheKey, url)`
 
 `queryURL` would return a `Document` (potentially a document presenting as a `Collection`).
+
+`store.buildURL()`
+
+### Associated Classes
+
+`Document`
+
+For a single resource, data would point at a single resource. For a collection, it
+would be an array.
+
+```js
+class Document {
+  fetch() {}
+  meta;
+  links;
+  data;
+}
+```
+
+`Collection`
+
+Collection would extend document to add access to individual pages. Pages would be 
+ `Document`s thus exposing the appropriate nested meta, links, and data subset.
+ 
+The `data` member for a collection would contain “all results” from all pages, and
+ the top level meta and links would effectively reflect the meta and links of “page 0”.
+
+```js
+class Collection extends Document {
+  pages {
+     '1': <Document>
+  };
+}
+```
 
 ### Caching Data and Mechanics
 
@@ -78,47 +101,7 @@ collections {
 
 ### Busting the Cache
 
-`Document`
 
-For a single resource, data would point at a single resource. For a collection, it
-would be an array.
-
-```js
-class Document {
-  fetch() {}
-  meta;
-  links;
-  data;
-}
-```
-
-`Collection`
-
-Collection would extend document to add access to individual pages. Pages would be 
- `Document`s thus exposing the appropriate nested meta, links, and data subset.
- 
-The `data` member for a collection would contain “all results” from all pages, and
- the top level meta and links would effectively reflect the meta and links of “page 0”.
-
-```js
-class Collection extends Document {
-  pages {
-     '1': <Document>
-  };
-}
-```
-
-### Allowing relationships to use this nice new ability as well
-
-Currently `hasMany` uses ember arrays and array proxies in a similar manner to `RecordArray`.
-We could use this opportunity to expose collections as a descriptor and give these new abilities
-to relationships as well.
-
-`collection()`
-
-
-
-`store.buildURL()`
 
 ## How we teach this
 
@@ -135,41 +118,39 @@ users?
 
 ## Drawbacks
 
-The sheer number of deprecations.
+Deprecation Churn.
 
-Deprecated store methods:
+Deprecate-able store methods:
 
  - `store.findByIds`
  - `store.findMany`
- - `store.findHasMany`
  - `store.findAll`
  - `store.query`
  
- Additional store methods capable of being deprecated
- 
+Potentially deprecate-able store methods (once follow up RFCs have landed
+for aligning single-resources and relationships with the `Document` and `Collection`
+API)
+
+ - `store.findHasMany`
  - `store.find`
  - `store.findBelongsTo`
  - `store.findRecord`
  - `store.queryRecord`
  - `store.filter` (moved to addon, we should finish off this method, svelte!)
  
- Other deprecations
+ Intimate classes we would remove or be closer to removing
+  (some may need hang around for the deprecation lifecycle or
+   for other RFCs to land)
  
- - `hasMany()` descriptor (and by proxy `ManyArray`)
- 
- Other potential deprecations
- 
- - `belongsTo()` descriptor
- 
- Intimate classes we would remove (some may hang around for the deprecation lifecycle)
- 
- - `ManyArray`
  - `RecordArray`
  - `AdapterPopulatedRecordArray`
  - `FilteredRecordArray`
  - `PromiseArray`
+ - `RecordArrayManager`
  
-JSON-API
+ Internally, `CollectionManager` would replace `RecordArrayManager` to fulfill new requirements.
+ 
+#### JSON-API
 
 Not everyone wants to learn json-api, and while it makes sense internally to ember-data
 aligning public APIs to mirror it's structure could encounter some resistance. That said,
@@ -179,8 +160,8 @@ so well thought out!
 
 ## Alternatives
 
-- Continued maintenance headaches in the relationship layer and support requests around
-  cache problems, pagination, manipulation, and proxy issues.
+- Don't do this: Continued maintenance headaches and support requests around cache problems, pagination,
+  manipulation, and proxy issues.
 - No top-level collection management, end users must handle combination of paginated data
   on their own, cache-key becomes simpler because URL is always the key.
 
@@ -195,7 +176,3 @@ so well thought out!
   the previous bullet point?
 - Should we have separate `queryResource` and `queryCollection` methods that allow us to differentiate
   collection cache-keys more clearly?
-
-
-> Optional, but suggested for first drafts. What parts of the design are still
-TBD?
