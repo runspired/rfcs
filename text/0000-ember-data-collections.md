@@ -72,43 +72,55 @@ So why this particular solution?
 
 ## Detailed design
 
-### Querying Data
+### Querying Collections
 
-`store.queryURL(cacheKey, url)`
+`store.fetchURL(url)`
 
-`queryURL` would return a `Document` (potentially a document presenting as a `Collection`).
+**TODO refactor the below as this is the "final" vision but not necessary for "collection only" focus**
+**TODO show what problems `Document` resolves over returning the resource or an array or resources**
 
-### Associated Classes
-
-`Document`
-
-For a single resource, data would point at a single resource. For a collection, it
-would be an array.
-
-```js
-class Document {
-  fetch() {}
-  meta;
-  links;
-  data;
-}
-```
-
-`Collection`
-
-Collection would extend document to add access to individual pages. Pages would be 
- `Document`s thus exposing the appropriate nested meta, links, and data subset.
+`fetchURL` returns a `Document` representing the various `meta` `links` `data` or `errors` returned by
+ a given API call.  This `Document` might or might not contain `Record` data.
  
-The `data` member for a collection would contain “all results” from all pages, and
- the top level meta and links would effectively reflect the meta and links of “page 0”.
+ `Document`s are made available via a lightweight class.
+ 
+ ```js
+ class Document {
+   fetch(options) {}
+   meta;
+   links;
+   data;
+ }
+ ```
+
+A `Document` with member `data` consisting of an `Array` or with `links` conforming to the `json-api`
+pagination spec is considered a `Collection`.  Collections may consist of paginated data. In order to
+support this, and to support meta and links information unique to individual pagination results, we
+provide a higher-order class to manage collection pages.
+
+`store.fetchCollection(url, collectionId)`
 
 ```js
-class Collection extends Document {
+class Collection {
+  links;
+  meta;
+  data;
   pages {
      '1': <Document>
-  };
+  }
 }
 ```
+
+Collection is similar to `Document` but with access to individual pages. Pages would be 
+ `Document`s thus exposing the appropriate nested meta, links, and data subset.
+  The `data` member for a collection would contain “all results” from all pages,
+  and the top level meta and links would effectively reflect the meta and links
+  of “page 0”.
+ 
+**TODO are the documents for individual pages also in the cache?**
+**TODO how do we know what collection to add a page to? what order it is in?**
+**TODO why cacheKey? why url? what's the difference? show the value of this API and finder API unification**
+
 
 ### Caching Data and Mechanics
 
@@ -116,16 +128,22 @@ Documents would be stored in a cache, similar to the identity map, in a manner t
 them to retain cache consistency but also store additional information such as `meta` `links`
 and `errors`.
 
-Collections would be stored in a two-level cache. The first level being "as a document" with
-an internal cache for documents by page.
+```js
+DocumentCache {
+  <cache-key>: <Document>
+}
+```
+
+Collections would be stored in the same cache, and serve as the additional cache for documents by page.
+Unfortunately, json-api only recommends that `page` be used for pagination. It is not required. For this
+reason, and because not all APIs connected to ember-data are `json-api`, enforcing use of the `page` param
+for use as the `cache-key` for for pages in a collection is problematic.
 
 ```js
-collections {
-   '/users/1/foos/2/bars' {
-     1 { meta links data }
-     2 { meta links data }
-     3 { meta links data }
-   }
+DocumentCache {
+  <cache-key-for-collection>: <Collection> {
+    <cache-key-for-page>: <Document>
+  }
 }
 ```
 
@@ -213,6 +231,8 @@ so well thought out!
 
 ## Unresolved questions
 
+- `Document` is potentially too generic a term when used in the context of a browser based application, but
+  `JsonAPIDocument` is overly coupled to `json-api`. Is there a good alternative?
 - References vs Resources and mixing them for operations
 - Record materialization (currently lazy). Can we make it not-lazy now that there are paths for pushing data into the
   store without requiring materialization? Should we explicitly make a public thing for the array (`Identifier`) instead?
