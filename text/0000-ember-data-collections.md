@@ -119,6 +119,8 @@ Collection is similar to `Document` but with access to individual pages. Pages w
  
 **TODO are the documents for individual pages also in the cache?**
 **TODO how do we know what collection to add a page to? what order it is in?**
+**TODO maybe the answer is that this RFC does not address merging the data of various pages of results, but
+  merely offers the ability to manage a result collection**
 **TODO why cacheKey? why url? what's the difference? show the value of this API and finder API unification**
 
 
