@@ -2,7 +2,7 @@
 - RFC PR: (leave this empty)
 - Ember Issue: (leave this empty)
 
-# [SUPER WIP] Ember Data Collections
+# [WIP] Ember Data Collections
 
 **This RFC should be considered the roughest of rough drafts**
 
@@ -52,12 +52,22 @@ For starters, it returns the `live-array` result of `store.peekAll`, meaning tha
 `store.findAll` also cannot support `meta` and `links` and poorly supports `pagination`, because it is the agglomeration
  of all requests for records of a specific `type` via any find method or local creation.
 
-**TODO issues with updating arrays and/or manipulating array order**
+The `PromiseArray` and `RecordArray` proxies also introduce a great amount of friction when attempting
+to manage the state of a list on the client side. `PromiseArray`, while proxying to an array, does not
+itself have any of the methods of `Array` or Ember's `MutableArray`.  `RecordArray` meanwhile extends
+`ArrayProxy` thus exposing `MutableArray` methods.  These methods differ from the methods available in
+Native JS arrays and contribute to the feeling that working with array data in Ember is not "just Javascript".
+
+Currently, app developers must first determine if they are working with the `PromiseArray`, the `RecordArray`,
+or the result of calling `toArray` to know how to access and manipulate the array. In the case of working with
+the native `Array` result of calling `toArray`, changes will not reflect back into record state and become
+difficult to manage or save, but working with `RecordArray` directly does not have clear guides or patterns
+ established for managing membership and manipulating item order and saving these changes.
 
 Altogether, these issues make managing arrays of records one of the more painful ergonomic and performance experiences 
 in `ember-data` today.
 
-So why this particular solution?
+**TODO So why this particular solution?**
 
 - aligning usage more closely with json-api principles enables us to provide more robust primitives
 - findAll meta / pagination / integrity problems
