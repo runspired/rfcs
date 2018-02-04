@@ -12,6 +12,8 @@ Improve the ergonomics of fetching and operating on collection endpoints in embe
 
 ## Motivation
 
+#### Ergonomic and performance issues with the current state of things
+
 In `ember-data` today, arrays of records are typically fetched from an API via either `store.query`
 or `store.findAll`.  These methods both return a `PromiseArray` wrapping either a `RecordArray` in
 the case of `store.findAll` or an `AdapterPopulatedRecordArray` in the case of `query`.
@@ -64,8 +66,15 @@ the native `Array` result of calling `toArray`, changes will not reflect back in
 difficult to manage or save, but working with `RecordArray` directly does not have clear guides or patterns
  established for managing membership and manipulating item order and saving these changes.
 
+The layers of indirection `RecordArray` proxies have a great cost on the mental model required to use `ember-data`,
+and a significant performance cost as well, as these proxies are not cheap and the classes built with them are
+built on a complex inheritance chain.  What's more, the patterns used to work around the limitations of the proxies
+more often than not are themselves significant bottlenecks in applications.
+
 Altogether, these issues make managing arrays of records one of the more painful ergonomic and performance experiences 
 in `ember-data` today.
+
+#### Ergonomic and performance benefits to be gained from a simpler mental model
 
 **TODO So why this particular solution?**
 
@@ -82,99 +91,84 @@ in `ember-data` today.
 
 ## Detailed design
 
-### Querying Collections
+### The Collection Class
 
-`store.fetchURL(url)`
+```ts
 
-**TODO refactor the below as this is the "final" vision but not necessary for "collection only" focus**
-**TODO show what problems `Document` resolves over returning the resource or an array or resources**
+abstract class Link {
+  href: String;
+  meta?: Object;
+}
 
-`fetchURL` returns a `Document` representing the various `meta` `links` `data` or `errors` returned by
- a given API call.  This `Document` might or might not contain `Record` data.
- 
- `Document`s are made available via a lightweight class.
- 
- ```js
- class Document {
-   fetch(options) {}
-   meta;
-   links;
-   data;
- }
- ```
+abstract class Links {
+  self: String|Link
+  first?: String|Link
+  last?: String|Link
+  prev?: String|Link
+  next?: String|Link
+}
 
-A `Document` with member `data` consisting of an `Array` or with `links` conforming to the `json-api`
-pagination spec is considered a `Collection`.  Collections may consist of paginated data. In order to
-support this, and to support meta and links information unique to individual pagination results, we
-provide a higher-order class to manage collection pages.
-
-`store.fetchCollection(url, collectionId)`
-
-```js
 class Collection {
-  links;
-  meta;
-  data;
-  pages {
-     '1': <Document>
-  }
+  public meta?: Object;
+  public links: Links;
+  public data?: Array<Object>;
+  public errors?: Object;
+
+  private store;
+
+  fetch(options: { requestOptions: Object, params: Object }): Promise<Collection> {}
+  
+  next(): Promise<Collection> {}
+
+  prev(): Promise<Collection> {}
+  
+  first(): Promise<Collection> {}
+  
+  last(): Promise<Collection> {}
 }
 ```
 
-Collection is similar to `Document` but with access to individual pages. Pages would be 
- `Document`s thus exposing the appropriate nested meta, links, and data subset.
-  The `data` member for a collection would contain “all results” from all pages,
-  and the top level meta and links would effectively reflect the meta and links
-  of “page 0”.
- 
-**TODO are the documents for individual pages also in the cache?**
-**TODO how do we know what collection to add a page to? what order it is in?**
-**TODO maybe the answer is that this RFC does not address merging the data of various pages of results, but
-  merely offers the ability to manage a result collection**
-**TODO why cacheKey? why url? what's the difference? show the value of this API and finder API unification**
+### Fetching Collections
 
+A new "finder" method would be introduced to `DS.Store` for requesting a collection.
+With this method in place, we would deprecate the `findAll` and `query` methods on `DS.Store`.
 
-### Caching Data and Mechanics
-
-Documents would be stored in a cache, similar to the identity map, in a manner that allows
-them to retain cache consistency but also store additional information such as `meta` `links`
-and `errors`.
-
-```js
-DocumentCache {
-  <cache-key>: <Document>
+```ts
+class Store {
+  fetchCollection(url: String, options: Object): Promise<Collection> {}
 }
 ```
 
-Collections would be stored in the same cache, and serve as the additional cache for documents by page.
-Unfortunately, json-api only recommends that `page` be used for pagination. It is not required. For this
-reason, and because not all APIs connected to ember-data are `json-api`, enforcing use of the `page` param
-for use as the `cache-key` for for pages in a collection is problematic.
+**TODO Reflective Adapter interface**
 
-```js
-DocumentCache {
-  <cache-key-for-collection>: <Collection> {
-    <cache-key-for-page>: <Document>
-  }
+#### Collection Caching
+
+Collections would be cached by `url`, but with the same ability to bust the cache when
+fetching a specific collection as when finding a single `Record`, either by a flag when
+using `fetch` or by implementing the appropriate adapter hook (`shouldBackgroundRefresh` or
+`shouldRefresh`).
+
+As an important note, a `Collection` need not have any `data`, and the available properties
+on a `Collection` MUST observe the rules of a [`json-api` Document](http://jsonapi.org/format/#document-top-level).
+
+```ts
+abstract class CollectionCache  {
+  [url: String]: Collection
 }
 ```
 
-`cacheKey` would be an identifier surfacing information about `type` and `id` and for collections
-`page`.
+#### Pagination Support
 
-`CacheKey`
 
-```js
-{
-  type,
-  id,
-  page
-}
-```
+#### Managing the Pagination results of multiple Collections
 
-### Busting the Cache
 
-**TODO**
+### Manipulating Collections
+
+#### An End to Lazy Record Materialization
+
+### Saving Collections
+
 
 ## How we teach this
 
@@ -197,8 +191,6 @@ Deprecation Churn.
 
 Deprecate-able store methods:
 
- - `store.findByIds`
- - `store.findMany`
  - `store.findAll`
  - `store.query`
  
@@ -206,6 +198,8 @@ Potentially deprecate-able store methods (once follow up RFCs have landed
 for aligning single-resources and relationships with the `Document` and `Collection`
 API)
 
+ - `store.findByIds`
+ - `store.findMany`
  - `store.findHasMany`
  - `store.find`
  - `store.findBelongsTo`
@@ -233,27 +227,14 @@ aligning public APIs to mirror it's structure could encounter some resistance. T
 the issues this data structure resolves also helps make the case for why json-api is
 so well thought out!
 
-
 ## Alternatives
 
 - Don't do this: Continued maintenance headaches and support requests around cache problems, pagination,
   manipulation, and proxy issues.
-- No top-level collection management, end users must handle combination of paginated data
-  on their own, cache-key becomes simpler because URL is always the key.
+- Land Collection as a private feature replacing parts of the internals, bring public over time.
 
 ## Unresolved questions
 
-- `Document` is potentially too generic a term when used in the context of a browser based application, but
-  `JsonAPIDocument` is overly coupled to `json-api`. Is there a good alternative?
-- References vs Resources and mixing them for operations
-- Record materialization (currently lazy). Can we make it not-lazy now that there are paths for pushing data into the
-  store without requiring materialization? Should we explicitly make a public thing for the array (`Identifier`) instead?
+- ResourceIdentifier vs Resource membership in a Collection and mixing them for operations
 - should we cleanup the relationship layer first (ala https://github.com/emberjs/data/pull/4882)
-- should `collection()` descriptor come as a separate RFC?
-- RFC for `buildURL()` potentially as `store.buildURL`, helper and how to use it to provide a url to `store.queryURL`
-- should we fast follow with an RFC for similarly cleaning up `belongsTo` and single
-  resources to ensure that these APIs move to a nice future together in step?
-- should `queryURL` only work for collections initially to avoid questions about
-  the previous bullet point?
-- Should we have separate `queryResource` and `queryCollection` methods that allow us to differentiate
-  collection cache-keys more clearly?
+- RFC for `buildURL()` potentially as `store.buildURL`, helper and how to use it to provide a url to `store.fetchCollection`
