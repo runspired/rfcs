@@ -79,13 +79,12 @@ in `ember-data` today.
 **TODO So why this particular solution?**
 
 - aligning usage more closely with json-api principles enables us to provide more robust primitives
-- findAll meta / pagination / integrity problems
-- query pagination and cache problems
-- RecordArray, ManyArray, and their various proxies
-  are difficult to reason about and debug, and surprise
-  folks by not being "just arrays".
+- treating json-api documents as first-class citizens solves real-world problems with meta/links/errors/
+  collections that do not map as efficiently to records.
+- allows end users to more easily solve querying, caching, and updating edge cases on their own
+  - enable more advanced patterns, improve flexibility (membership, pagination, caching, meta)
+- no surprises, "just JS", easier to debug
 - separate the fetch from the current data
-- enable more advanced patterns, improve flexibility (membership, pagination, caching, meta)
 - pave a path for improvements and simplifications across ember-data in single-resource and
   relationship layer as well
 
@@ -139,7 +138,7 @@ class Store {
 }
 ```
 
-**TODO Reflective Adapter interface**
+**TODO How does this fit into the Adapter interface without leading to more code bloat?**
 
 #### Collection Caching
 
@@ -165,8 +164,6 @@ abstract class CollectionCache  {
 
 ### Manipulating Collections
 
-#### An End to Lazy Record Materialization
-
 ### Saving Collections
 
 
@@ -187,40 +184,51 @@ users?
 
 ## Drawbacks
 
-Deprecation Churn.
+#### An End to Lazy Record Materialization
 
-Deprecate-able store methods:
+
+
+#### An End to promise-proxies
+
+
+
+#### Perceived Churn
+
+The primary drawback to this RFC is perceived "deprecation churn". We must make a
+clear case for why this presents a better future, and how it fits into the comprehensive
+for ember-data's future.
+
+Deprecate-able methods:
 
  - `store.findAll`
  - `store.query`
+ - `Adapter.findAll`
+ - `Adapter.query`
  
-Potentially deprecate-able store methods (once follow up RFCs have landed
-for aligning single-resources and relationships with the `Document` and `Collection`
-API)
+Deprecate-able intimate classes:
 
- - `store.findByIds`
- - `store.findMany`
- - `store.findHasMany`
- - `store.find`
- - `store.findBelongsTo`
- - `store.findRecord`
- - `store.queryRecord`
- - `store.filter` (moved to addon, we should finish off this method, svelte!)
- 
- Intimate classes we would remove or be closer to removing
-  (some may need hang around for the deprecation lifecycle or
-   for other RFCs to land)
- 
  - `RecordArray`
  - `AdapterPopulatedRecordArray`
  - `FilteredRecordArray`
  - `PromiseArray`
  - `RecordArrayManager`
  
- Internally, `CollectionManager` would replace `RecordArrayManager` to fulfill new requirements. Instead of `RecordArray`
- we would ideally just use arrays; however, questions regarding lazy-materialization must be answered first.
+Internally, `CollectionManager` would replace `RecordArrayManager` to fulfill new requirements.
+
+Closer to being deprecate-able methods (once follow up RFCs have landed
+for aligning single-resources and relationships with the `Document` and `Collection`
+API)
+
+ - `store.findByIds`
+ - `store.findMany`
+ - `store.findHasMany`
+ - `Adapter.findByIds`
+ - `Adapter.findMany`
+ - `Adapter.findHasMany`
+ - `store.find`
+ - `store.filter` (already moved to addon and asserted, we should finish off removing this method, svelte!)
  
-#### JSON-API
+#### JSON-API hesitation
 
 Not everyone wants to learn json-api, and while it makes sense internally to ember-data
 aligning public APIs to mirror it's structure could encounter some resistance. That said,
@@ -229,12 +237,14 @@ so well thought out!
 
 ## Alternatives
 
-- Don't do this: Continued maintenance headaches and support requests around cache problems, pagination,
-  manipulation, and proxy issues.
+- Don't do this: Continued maintenance headaches and support requests around cache problems,
+   pagination, manipulation, and proxy issues.
 - Land Collection as a private feature replacing parts of the internals, bring public over time.
 
 ## Unresolved questions
 
 - ResourceIdentifier vs Resource membership in a Collection and mixing them for operations
-- should we cleanup the relationship layer first (ala https://github.com/emberjs/data/pull/4882)
-- RFC for `buildURL()` potentially as `store.buildURL`, helper and how to use it to provide a url to `store.fetchCollection`
+- META RFC or RFC Issue for presenting the comprehensive vision for `ember-data` into which
+   this RFC fits.
+- RFC for `buildURL()` potentially as `store.buildURL`, helper and how to use it to provide
+   a url to `store.fetchCollection`
