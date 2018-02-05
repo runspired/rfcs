@@ -132,9 +132,25 @@ class Collection {
 A new "finder" method would be introduced to `DS.Store` for requesting a collection.
 With this method in place, we would deprecate the `findAll` and `query` methods on `DS.Store`.
 
+*Note: This method would be eventually be deprecated in favor of a method with the same signature
+but allowing for fetching of single-resource documents as well.*
+
 ```ts
 class Store {
   fetchCollection(url: String, options: Object): Promise<Collection> {}
+}
+```
+
+Similarly, a new `push` method would be introduced to `DS.Store` for pushing a collection
+into the store.
+
+*Note: This method would similarly be eventually deprecated in favor of a method with the same
+signature but allowing for the pushing of single-resource documents into the store as well. Prior
+Art exists [here](https://github.com/emberjs/rfcs/pull/161).*
+
+```ts
+class Store {
+  pushCollection(jsonApiDocument: Object): Collection {}
 }
 ```
 
