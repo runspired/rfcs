@@ -76,7 +76,7 @@ in `ember-data` today.
 
 #### Ergonomic and performance benefits to be gained from a simpler mental model
 
-**TODO So why this particular solution?**
+**TODO expand on these points**
 
 - aligning usage more closely with json-api principles enables us to provide more robust primitives
 - treating json-api documents as first-class citizens solves real-world problems with meta/links/errors/
@@ -174,14 +174,17 @@ abstract class CollectionCache  {
 
 #### Pagination Support
 
+Because collections are cached by `URL`, and because `Links` are `URL`s, not only are pagination
+results easy to associate with each other, but are even cached as individual collections. Async
+iteration becomes possible by calling `collection.next()`, which returns a promise that resolves
+to the next collection in the list, or `null` if no `next` link is present in `Links`.
 
-#### Managing the Pagination results of multiple Collections
+##### Managing the combined Pagination results of multiple Collections
 
-
-### Manipulating Collections
-
-### Saving Collections
-
+At times an Application may want to display the combined results of paginated requests. While the
+specifics of this feature is outside the purview of this RFC, achieving such with the `Collection`
+feature would be relatively simple given the ease of iterating pagination links, with the flexibility
+to handle any number of UX and Performance strategies.
 
 ## How we teach this
 
@@ -259,8 +262,11 @@ so well thought out!
 
 ## Unresolved questions
 
-- ResourceIdentifier vs Resource membership in a Collection and mixing them for operations
+- ResourceIdentifier vs Resource membership in a Collection, json-api allows for collections
+   of identifiers
 - META RFC or RFC Issue for presenting the comprehensive vision for `ember-data` into which
    this RFC fits.
 - RFC for `buildURL()` potentially as `store.buildURL`, helper and how to use it to provide
    a url to `store.fetchCollection`
+- RFC for a simpler adapter/serializer model, reducing the method bloat seen today and separating
+   core store concerns from the network layer.
