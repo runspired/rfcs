@@ -205,11 +205,11 @@ users?
 
 #### An End to Lazy Record Materialization
 
-
+**TODO explain why this is actually a good thing, even for perf**
 
 #### An End to promise-proxies
 
-
+**TODO explain why this is actually a good thing, even for templates**
 
 #### Perceived Churn
 
