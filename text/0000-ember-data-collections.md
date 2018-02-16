@@ -12,67 +12,111 @@ Improve the ergonomics of fetching and operating on collection endpoints in embe
 
 ## Motivation
 
+Today, the use of `RecordArray` and `PromiseArray` proxies have a great cost on the mental model
+ required to use `ember-data`, and foment the impression that `Ember` is too complex and not 
+ `Just Javascript™`.
+
+These proxies have a significant performance cost as well as these proxies are not cheap and
+ the classes built with them are built on a complex inheritance chain. What's more, the patterns
+ used to work around the limitations of the proxies more often than not are themselves significant
+ bottlenecks in applications.
+
+This RFC seeks to remove one of the more painful ergonomic and performance experiences in `ember-data`
+ by providing a `Just Javascript™` primitive upon which application and addon developers can design
+ more complex features.
+
 #### Ergonomic and performance issues with the current state of things
 
 In `ember-data` today, arrays of records are typically fetched from an API via either `store.query`
-or `store.findAll`.  These methods both return a `PromiseArray` wrapping either a `RecordArray` in
-the case of `store.findAll` or an `AdapterPopulatedRecordArray` in the case of `query`.
+ or `store.findAll`.  These methods both return a `PromiseArray` wrapping either a `RecordArray` in
+ the case of `store.findAll` or an `AdapterPopulatedRecordArray` in the case of `query`.
 
-In the case of `store.query`, `meta` and `links` from the response are available on the `RecordArray`,
-but only `meta` is proxied to the `PromiseArray`.  Folks reach into `PromiseArray.content` to get access
-to the `RecordArray` improperly, because they do not understand the async nature of this proxy but notice
- that it "seems to just work in templates".
+In the case of `store.query`, `meta` and `links` from the response are available on the
+ `AdapterPopulatedRecordArray`, but only `meta` is proxied onto the `PromiseArray`.  Folks reach into 
+ `PromiseArray.content` to get access to the `RecordArray` improperly, because they do not understand
+  the async nature of this proxy but notice that it "seems to just work in templates".
 
-`AdapterPopulatedRecordArray` and `RecordArray`, which it extends, both extend `Ember.ArrayProxy`.
-Their content, instead of being an array of records, is an array of `InternalModel`s. A private
-construct. Ember-data uses the `objectAt` method to lazily materialize the records for these internal-models
-on access.  This is another very confusing thing, even if good for perf.
+**Example Bad Pattern**
+
+```js
+Route.extend({
+  model() {
+    return this.get('store').findAll('juju');
+  }
+});
+
+Controller.extend({
+  badJuju: computed('model.length', function() {
+    return this.get('model.content').toArray()
+      .filter(r => r.get('isBad'));
+  })
+});
+```
+
+`AdapterPopulatedRecordArray` and `RecordArray`, which it extends, both extend `Ember.ArrayProxy`. Their
+ content, instead of being an array of records, is an array of `InternalModel`s: a private construct.
+ Although in the near future this will be an array of `ModelData`s, this will remain a point of confusion.
+ Ember-data uses the `objectAt` method to switch `InternalModel` for a lazily-materialized record instance
+ on access.
 
 Adding to the confusion, these classes contain many public-looking-but-actually-private properties and
-methods in addition to `meta`, `links` and `toArray()`.  The sad reality is that `toArray()` is the only
- endorsed semi-sane way of interacting with the record-array, although it forks the array at the call-point
- leading developers to lose the ability to respond to or make updates appropriately. This negates the
- benefits of `lazy-materialization` when relied upon, as it often is.
+ methods in addition to `meta`, `links`.  Indeed, the actual "public" API surface area of
+ [`RecordArray`](https://www.emberjs.com/api/ember-data/3.0/classes/DS.RecordArray) and
+ [`AdapterPopulatedRecordArray`](https://www.emberjs.com/api/ember-data/3.0/classes/DS.AdapterPopulatedRecordArray)
+ doesn't even include `meta`, `links` or `length`. That these classes are extensions of `ArrayProxy`
+ is a side-note. Most of the `ArrayProxy` methods are unsafe for app developers to utilize, as they
+ expect `InternalModel` or require the use of `ArrayProxy.replace()` which is overwritten to throw
+ an error.  Incidentally, that [error](https://github.com/emberjs/data/blob/v3.0.0/addon/-private/system/record-arrays/record-array.js#L85)
+ is what documents and alerts app developers to their one crutch: `toArray`. For the most part, even
+ though `ArrayProxy` is a public class in Ember, it's public looking (and public documented if a developer
+ realizes the `ArrayProxy` connection and foes and finds it) methods are private from the perspective of
+ `RecordArray`.
  
-`RecordArray.toArray()` creates a divergence in the API, as developers must now reason about whether they
-  are interacting with a `RecordArray` or the result of calling `toArray()` and similarly must devine 
+ Unfortunately, the only clear and reliable way to avoid private API usage and manage an array of records
+  is with `toArray()`.  However, this introduces another problem as it forks the array at the call site
+  leading developers to lose the ability to respond to or make updates appropriately. When relied upon, 
+  this negates any benefits of `lazy-materialization` (if there are any, it is unclear whether `RecordArray`s
+  benefit from lazy materialization to the same degree as relationships).
+ 
+`toArray()` creates a divergence in the API, as developers must now reason about whether they
+  are interacting with a `RecordArray` or the result of calling `toArray()` and similarly must divine 
   whether this means `meta` and `links` are available to them or not.
 
 One of the more frustrating aspects of `store.query` is all calls to it bypass the cache, yet it is the
-only method by which to make a request for a specific collection today via a store that touts caching as
- its selling point.  `store.query` is also the mandatory method to use if you want access to `links` and
-`meta`.
+ only method by which to make a request for a specific collection today via a store that touts caching as
+ its selling point.  `store.query` is also the mandatory method to use if you want access to `links` and `meta`.
 
 The alternative to `store.query`, `store.findAll` comes with its own set of caveats.
 
-For starters, it returns the `live-array` result of `store.peekAll`, meaning that all known records of a
- type are included, in random order, regardless of state.  Effectively, this makes the result of a request
-  via `store.findAll` useless without an array computed and using `RecordArray.toArray().filter(() => {})`.
-  This negates the benefits of the `live-array` as well as of `lazy-materialization` when relied upon,
-  as it often is.
+`findAll` returns the `live-array` result of `store.peekAll`, meaning that all known records of a
+ type are included, in unreliable order, regardless of state.  Effectively, this makes the result of a request
+ via `store.findAll` useless without an array computed and using `RecordArray.toArray().filter(() => {})`.
+ This negates the benefits of the `live-array` as well as of `lazy-materialization` when relied upon,
+ as it often is.
 
 `store.findAll` also cannot support `meta` and `links` and poorly supports `pagination`, because it is the agglomeration
  of all requests for records of a specific `type` via any find method or local creation.
 
 The `PromiseArray` and `RecordArray` proxies also introduce a great amount of friction when attempting
-to manage the state of a list on the client side. `PromiseArray`, while proxying to an array, does not
-itself have any of the methods of `Array` or Ember's `MutableArray`.  `RecordArray` meanwhile extends
-`ArrayProxy` thus exposing `MutableArray` methods.  These methods differ from the methods available in
-Native JS arrays and contribute to the feeling that working with array data in Ember is not "just Javascript".
+ to manage the state of a list on the client side. `PromiseArray`, while proxying to an array, does not
+ itself have any of the methods of `Array` or Ember's `MutableArray` or `ArrayProxy` (such as `toArray`).
+ `RecordArray` meanwhile extends `ArrayProxy` thus exposing `MutableArray` methods.  These methods differ
+ from the methods available in Native JS arrays and contribute to the feeling that working with array data
+ in Ember is not "just Javascript".
 
 Currently, app developers must first determine if they are working with the `PromiseArray`, the `RecordArray`,
-or the result of calling `toArray` to know how to access and manipulate the array. In the case of working with
-the native `Array` result of calling `toArray`, changes will not reflect back into record state and become
-difficult to manage or save, but working with `RecordArray` directly does not have clear guides or patterns
+ or the result of calling `toArray` to know how to access and manipulate the array. In the case of working with
+ the native `Array` result of calling `toArray`, changes will not reflect back into record state and become
+ difficult to manage or save, but working with `RecordArray` directly does not have clear guides or patterns
  established for managing membership and manipulating item order and saving these changes.
 
 The layers of indirection `RecordArray` proxies have a great cost on the mental model required to use `ember-data`,
-and a significant performance cost as well, as these proxies are not cheap and the classes built with them are
-built on a complex inheritance chain.  What's more, the patterns used to work around the limitations of the proxies
-more often than not are themselves significant bottlenecks in applications.
+ and a significant performance cost as well, as these proxies are not cheap and the classes built with them are
+ built on a complex inheritance chain.  What's more, the patterns used to work around the limitations of the proxies
+ more often than not are themselves significant bottlenecks in applications.
 
 Altogether, these issues make managing arrays of records one of the more painful ergonomic and performance experiences 
-in `ember-data` today.
+ in `ember-data`.
 
 #### Ergonomic and performance benefits to be gained from a simpler mental model
 
@@ -141,6 +185,10 @@ class Store {
 }
 ```
 
+**TODO explain why fetchCollection and not findCollection, and details about shouldReload / shouldBackgroundReload support**
+
+### Pushing Collections
+
 Similarly, a new `push` method would be introduced to `DS.Store` for pushing a collection
 into the store.
 
@@ -186,6 +234,14 @@ specifics of this feature is outside the purview of this RFC, achieving such wit
 feature would be relatively simple given the ease of iterating pagination links, with the flexibility
 to handle any number of UX and Performance strategies.
 
+### No changes peekAll / No peekCollection
+
+This RFC considers changes to the behavior of `peekAll` to return a `Collection` instead of a `RecordArray`
+ to be outside the scope of this RFC. It also declines to proffer a `peekCollection` API for checking
+ for the existence of a collection locally.  For the time being, `fetchCollection` gives users the
+ granular ability to decide whether to hit the network or not. Changes to the `peek` API ought to be
+ scoped to a new RFC.
+
 ## How we teach this
 
 **TODO**
@@ -202,6 +258,10 @@ at any level?
 users?
 
 ## Drawbacks
+
+#### Doesn't address relationships
+
+**TODO a bit about this**
 
 #### An End to Lazy Record Materialization
 
@@ -226,8 +286,6 @@ Deprecate-able methods:
  
 Deprecate-able intimate classes:
 
- - `RecordArray`
- - `AdapterPopulatedRecordArray`
  - `FilteredRecordArray`
  - `PromiseArray`
  - `RecordArrayManager`
@@ -236,7 +294,7 @@ Internally, `CollectionManager` would replace `RecordArrayManager` to fulfill ne
 
 Closer to being deprecate-able methods (once follow up RFCs have landed
 for aligning single-resources and relationships with the `Document` and `Collection`
-API)
+API, and for building URLs / fetching data)
 
  - `store.findByIds`
  - `store.findMany`
@@ -246,6 +304,11 @@ API)
  - `Adapter.findHasMany`
  - `store.find`
  - `store.filter` (already moved to addon and asserted, we should finish off removing this method, svelte!)
+ 
+ Closer to being deprecate-able intimate classes (once follow up RFCs have landed proposing new `peek` APIs)
+
+ - `RecordArray`
+ - `AdapterPopulatedRecordArray`
  
 #### JSON-API hesitation
 
@@ -259,6 +322,7 @@ so well thought out!
 - Don't do this: Continued maintenance headaches and support requests around cache problems,
    pagination, manipulation, and proxy issues.
 - Land Collection as a private feature replacing parts of the internals, bring public over time.
+- **TODO is an addon feasible**
 
 ## Unresolved questions
 
