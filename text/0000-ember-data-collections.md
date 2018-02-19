@@ -293,7 +293,7 @@ into the store.
 
 *Note: This method would similarly be eventually deprecated in favor of a method with the same
 signature but allowing for the pushing of single-resource documents into the store as well. Prior
-Art exists [here](https://github.com/emberjs/rfcs/pull/161).*
+Art exists [here](https://github.com/emberjs/rfcs/pull/161). and [here](https://github.com/emberjs/rfcs/pull/160)*
 
 ```ts
 class Store {
