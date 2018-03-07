@@ -12,43 +12,93 @@ Improve the ergonomics of fetching and operating on collection endpoints in embe
 
 ## Motivation
 
-Today, the use of `RecordArray` and `PromiseArray` proxies have a great cost on the mental model
+The use of `RecordArray` and `PromiseArray` proxies have a great cost on the mental model
  required to use `ember-data`, and foment the impression that `Ember` is too complex and not 
  `Just Javascript™`.
 
-These proxies have a significant performance cost as well as these proxies are not cheap and
- the classes built with them are built on a complex inheritance chain. What's more, the patterns
- used to work around the limitations of the proxies more often than not are themselves significant
- bottlenecks in applications.
+In addition to the mental overhead, these proxies have a significant performance cost as the proxy
+ mechanism is expensive and these ember-data's proxy classes are constructed via a complex chain
+ of inheritance.
+ 
+Patterns used to work around the limitations of the proxies often introduce significant additional
+mental and performance penalties.
 
-This RFC seeks to remove one of the more painful ergonomic and performance experiences in `ember-data`
- by providing a `Just Javascript™` primitive upon which application and addon developers can design
- more complex features.
+This RFC seeks to remove this painful ergonomic and performance experience by providing a 
+ `Just Javascript™` primitive upon which application and addon developers can design more complex
+ features.
 
-#### Ergonomic and performance issues with the current state of things
+### The current state of things
 
-In `ember-data` today, arrays of records are typically fetched from an API via either `store.query`
+In `ember-data` today, lists of records are typically fetched from an API via either `store.query`
  or `store.findAll`.  These methods both return a `PromiseArray` wrapping either a `RecordArray` in
  the case of `store.findAll` or an `AdapterPopulatedRecordArray` in the case of `query`.
 
-In the case of `store.query`, `meta` and `links` from the response are available on the
- `AdapterPopulatedRecordArray`, but only `meta` is available by proxy on the `PromiseArray`.
- Because folks do not correctly grok the async nature of this proxy, but notice that it "seems
+####Over Promising
+
+A common pitfall is to not realize the consequences of the "magic" that the promise-aware
+hooks such as `model` provide. For instance, the following model-hooks are subtly different,
+yet appear nearly the same to templates. Users passing their model into components will encounter
+confusion. [This example twiddle](https://ember-twiddle.com/fa2d8cfa74430e3e417ff51286cb58df?fileTreeShown=false&openFiles=routes.application.js%2C)
+will allow you to experiment with what is shown below.
+
+```js
+export default Route.extend({
+  model() { 
+    return RSVP.hash({
+      jujus: this.get('store').query('juju', {})
+    });  // the `model.jujus` will be an `AdapterPopulatedRecordArray`
+  }
+});
+
+export default Route.extend({
+     model() { 
+       return RSVP.hash({
+         jujus: this.get('store').query('juju', {})
+                  .then(recordArray => recordArray)
+       });  // the `model.jujus` will still be an `AdapterPopulatedRecordArray`
+     }
+   });
+
+export default Route.extend({
+  model() { 
+    return {
+      jujus: this.get('store').query('juju', {})
+    }; // the `model.jujus` will be a `PromiseArray`
+  }
+});
+
+export default Route.extend({
+     model() { 
+       return {
+         jujus: this.get('store').query('juju', {})
+                  .then(recordArray => recordArray)
+       };  // the `model.jujus` will be a `Promise` and the template will not treat it as an array
+     }
+   });
+```
+
+While the promise-aware nature of the model-hook enables users to usually encounter a consistent
+experience, fetching data from controllers or components is more prone to encounter difficulty
+distinguishing between `Promise`, `PromiseArray` and `RecordArray|AdapterPopulatedRecordArray`.
+
+#### Under Delivering
+
+Because folks do not correctly grok the async nature of this proxy, but notice that it "seems
  to just work in templates", they improperly reach into `PromiseArray.content` to get access
  to the `RecordArray`. Most often this happens in computed properties.
 
-**Example Bad Pattern**
+**Example Bad Pattern 1**
 
 ```js
 export default Route.extend({
   model() {
-    return this.get('store').findAll('juju');
+    return { jujus: this.get('store').findAll('juju') };
   }
 });
 
 export default Controller.extend({
-  badJuju: computed('model.length', function() {
-    return this.get('model.content')
+  badJuju: computed('model.jujus.length', function() {
+    return this.get('model.jujus.content')
       .filter(r => r.get('isBad'));
   })
 });
@@ -95,11 +145,31 @@ export default Route.extend({
 });
 ```
 
+**Example of what "works" today**
+
+```js
+export default Route.extend({
+  model() { 
+    return this.get('store').query('juju', {})
+      .then(recordArray => ({
+        firstJuju: recordArray.objectAt(0),
+        allJuju: recordArray
+      }));
+  }
+});
+```
+
+#### Lost in Translation
+
+In the case of `store.query`, `meta` and `links` from the response are available on the
+ `AdapterPopulatedRecordArray`, but only `meta` is available by proxy on the `PromiseArray`.
+
+
 Adding to the confusion, these classes contain many public-looking-but-actually-private properties and
- methods in addition to `meta`, `links`.  Indeed, the actual "public" API surface area of
+ methods in addition to `meta`, `links`.  The "public" API documentation of
  [`RecordArray`](https://www.emberjs.com/api/ember-data/3.0/classes/DS.RecordArray) and
  [`AdapterPopulatedRecordArray`](https://www.emberjs.com/api/ember-data/3.0/classes/DS.AdapterPopulatedRecordArray)
- doesn't even include `meta`, `links` or `length`. That these classes are extensions of `ArrayProxy`
+ doesn't even include `meta`, `links` or `length`: that these classes are extensions of `ArrayProxy`
  is a side-note. Most of the `ArrayProxy` methods are unsafe for app developers to utilize, as they
  expect `InternalModel` or require the use of `ArrayProxy.replace()` which is overwritten to throw
  an error.  Incidentally, that [error](https://github.com/emberjs/data/blob/v3.0.0/addon/-private/system/record-arrays/record-array.js#L85)
@@ -176,6 +246,8 @@ export default Controller.extend({
 });
 ```
 
+#### Corrupt Bargain
+
 Even with this careful preparation, developers must still face several challenges. How do they resolve
 local changes post-update? How can they push local changes back onto the `RecordArray` itself? While
 these are not questions that this RFC answers, moving a step closer to "just Javascript" will help us
@@ -209,15 +281,10 @@ Currently, app developers must first determine if they are working with the `Pro
  difficult to manage or save, but working with `RecordArray` directly does not have clear guides or patterns
  established for managing membership and manipulating item order and saving these changes.
 
-The layers of indirection `RecordArray` proxies have a great cost on the mental model required to use `ember-data`,
- and a significant performance cost as well, as these proxies are not cheap and the classes built with them are
- built on a complex inheritance chain.  What's more, the patterns used to work around the limitations of the proxies
- more often than not are themselves significant bottlenecks in applications.
 
-Altogether, these issues make managing arrays of records one of the more painful ergonomic and performance experiences 
- in `ember-data`.
 
-#### Ergonomic and performance benefits to be gained from a simpler mental model
+
+### Ergonomic and performance benefits to be gained from a simpler mental model
 
 **TODO expand on these points**
 
@@ -230,6 +297,10 @@ Altogether, these issues make managing arrays of records one of the more painful
 - separate the fetch from the current data
 - pave a path for improvements and simplifications across ember-data in single-resource and
   relationship layer as well
+
+
+
+
 
 ## Detailed design
 
