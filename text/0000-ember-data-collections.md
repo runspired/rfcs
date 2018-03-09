@@ -21,285 +21,32 @@ In addition to the mental overhead, these proxies have a significant performance
  of inheritance.
  
 Patterns used to work around the limitations of the proxies often introduce significant additional
-mental and performance penalties.
+ mental and performance penalties.
 
 This RFC seeks to remove this painful ergonomic and performance experience by providing a 
  `Just Javascript™` primitive upon which application and addon developers can design more complex
  features.
 
-### The current state of things
+### A simpler primitive for the future
 
-In `ember-data` today, lists of records are typically fetched from an API via either `store.query`
- or `store.findAll`.  These methods both return a `PromiseArray` wrapping either a `RecordArray` in
- the case of `store.findAll` or an `AdapterPopulatedRecordArray` in the case of `query`.
-
-####Over Promising
-
-A common pitfall is to not realize the consequences of the "magic" that the promise-aware
-hooks such as `model` provide. For instance, the following model-hooks are subtly different,
-yet appear nearly the same to templates. Users passing their model into components will encounter
-confusion. [This example twiddle](https://ember-twiddle.com/fa2d8cfa74430e3e417ff51286cb58df?fileTreeShown=false&openFiles=routes.application.js%2C)
-will allow you to experiment with what is shown below.
-
-```js
-export default Route.extend({
-  model() { 
-    return RSVP.hash({
-      jujus: this.get('store').query('juju', {})
-    });  // the `model.jujus` will be an `AdapterPopulatedRecordArray`
-  }
-});
-
-export default Route.extend({
-     model() { 
-       return RSVP.hash({
-         jujus: this.get('store').query('juju', {})
-                  .then(recordArray => recordArray)
-       });  // the `model.jujus` will still be an `AdapterPopulatedRecordArray`
-     }
-   });
-
-export default Route.extend({
-  model() { 
-    return {
-      jujus: this.get('store').query('juju', {})
-    }; // the `model.jujus` will be a `PromiseArray`
-  }
-});
-
-export default Route.extend({
-     model() { 
-       return {
-         jujus: this.get('store').query('juju', {})
-                  .then(recordArray => recordArray)
-       };  // the `model.jujus` will be a `Promise` and the template will not treat it as an array
-     }
-   });
-```
-
-While the promise-aware nature of the model-hook enables users to usually encounter a consistent
-experience, fetching data from controllers or components is more prone to encounter difficulty
-distinguishing between `Promise`, `PromiseArray` and `RecordArray|AdapterPopulatedRecordArray`.
-
-#### Under Delivering
-
-Because folks do not correctly grok the async nature of this proxy, but notice that it "seems
- to just work in templates", they improperly reach into `PromiseArray.content` to get access
- to the `RecordArray`. Most often this happens in computed properties.
-
-**Example Bad Pattern 1**
-
-```js
-export default Route.extend({
-  model() {
-    return { jujus: this.get('store').findAll('juju') };
-  }
-});
-
-export default Controller.extend({
-  badJuju: computed('model.jujus.length', function() {
-    return this.get('model.jujus.content')
-      .filter(r => r.get('isBad'));
-  })
-});
-```
-
-`AdapterPopulatedRecordArray` and `RecordArray`, which it extends, both extend `Ember.ArrayProxy`. Their
- content, instead of being an array of records, is an array of `InternalModel`s: a private construct.
- Although in the near future this will be an array of `ModelData`s, this will remain a point of confusion.
- Ember-data uses the `objectAt` method to switch `InternalModel` for a lazily-materialized record instance
- on access.
- 
- For example, the following pattern does not work as expected, because `firstJuju` will be `undefined`,
- as `recordArray` is not a true array.
-
-**Example of not "Just Javascript" 1** 
-
-```js
-export default Route.extend({
-  model() { 
-    return this.get('store').query('juju', {})
-      .then(recordArray => ({
-        firstJuju: recordArray[0],
-        allJuju: recordArray
-      }));
-  }
-});
-```
-
-**Example of not "Just Javascript" 2** 
-
-The following anti-pattern also does not work as expected. Here, the developer
-reaches in to access the content of the `RecordArray` seeking direct access to
-the records. However, `firstJuju` will be an `InternalModel`, not a `Record`.
-
-```js
-export default Route.extend({
-  model() { 
-    return this.get('store').query('juju', {})
-      .then(recordArray => ({
-        firstJuju: recordArray.get('content')[0],
-        allJuju: recordArray
-      }));
-  }
-});
-```
-
-**Example of what "works" today**
-
-```js
-export default Route.extend({
-  model() { 
-    return this.get('store').query('juju', {})
-      .then(recordArray => ({
-        firstJuju: recordArray.objectAt(0),
-        allJuju: recordArray
-      }));
-  }
-});
-```
-
-#### Lost in Translation
-
-In the case of `store.query`, `meta` and `links` from the response are available on the
- `AdapterPopulatedRecordArray`, but only `meta` is available by proxy on the `PromiseArray`.
-
-
-Adding to the confusion, these classes contain many public-looking-but-actually-private properties and
- methods in addition to `meta`, `links`.  The "public" API documentation of
- [`RecordArray`](https://www.emberjs.com/api/ember-data/3.0/classes/DS.RecordArray) and
- [`AdapterPopulatedRecordArray`](https://www.emberjs.com/api/ember-data/3.0/classes/DS.AdapterPopulatedRecordArray)
- doesn't even include `meta`, `links` or `length`: that these classes are extensions of `ArrayProxy`
- is a side-note. Most of the `ArrayProxy` methods are unsafe for app developers to utilize, as they
- expect `InternalModel` or require the use of `ArrayProxy.replace()` which is overwritten to throw
- an error.  Incidentally, that [error](https://github.com/emberjs/data/blob/v3.0.0/addon/-private/system/record-arrays/record-array.js#L85)
- is what documents and alerts app developers to their one crutch: `toArray`. For the most part, even
- though `ArrayProxy` is a public class in Ember, it's public looking (and public documented if a developer
- realizes the `ArrayProxy` connection and foes and finds it) methods are private from the perspective of
- `RecordArray`.
- 
-`toArray()` creates a divergence in the API, as developers must now reason about whether they
-   are interacting with a `RecordArray` or the result of calling `toArray()` and similarly must divine 
-   whether this means `meta` and `links` are available to them or not.
-
- Unfortunately, the only clear and reliable way to avoid private API usage and manage an array of records
-  is with `toArray()`.  However, this introduces another problem as it forks the array at the call site
-  leading developers to lose the ability to respond to or make updates appropriately. When relied upon, 
-  this negates any benefits of `lazy-materialization` (if there are any, it is unclear whether `RecordArray`s
-  benefit from lazy materialization to the same degree as relationships).
+`ember-data` seeks to provide a flexible, efficient, and powerful core experience up which addons and
+  apps can ergonomically implement complex requirements. While `ember-data` will not require users to
+  adopt the `json-api` standard for their API, `json-api` is a well developed standard upon which this
+  core experience can be built. By aligning core `ember-data` primitives to `json-api` concepts,
+  we gain a readily understood mental model of how various concepts and primitives fit together, and
+  documentation to support it.
   
-**Example unsafe toArray usage**
+In practice, this is a formalization of what `ember-data` already provides: an interface through which
+  to work with data from any source in a unified format.  Already today, that format is often close to
+  `json-api` internally.  By standardizing this format, we can more confidently expose more behaviors
+  and information to app and addon developers, empowering them more than ever before.
 
-```js
-export default Route.extend({
-  model() { 
-    return this.get('store').query('juju', {})
-      .then(recordArray => recordArray.toArray());
-  },
-  
-export default Controller.extend({
-  actions: {
-    removeJuju(juju) {
-      this.get('model').removeObject(juju);
-    },
-    addJuju(juju) {
-      this.get('model').pushObject(juju);
-    },
-    updateJuju() {
-      this.get('model').update();
-    }
-  }
-});
-```
-
-Note how even after calling `toArray()` a user must use `removeObject` and `pushObject` to see
- updates propagate to their templates, using `splice` and `push` here do not "just work". However,
- this pattern is still susceptible to data flow problems. The `updateJuju` action will update
- the `recordArray` returned by the query; however, those updates won't be reflected into the array
- created by calling `toArray`.  Developers that recognize this issue will fall back to the following
- pattern instead.
-
-```js
-export default Route.extend({
-  model() { 
-    return this.get('store').query('juju', {})
-      .then(r => r); // ensure model is the recordArray, not the promiseArray
-  },
-
-export default Controller.extend({
-
-  jujuArr: computed('model.length', function() {
-    return this.get('model').toArray();
-  }),
-
-  actions: {
-    removeJuju(juju) {
-      this.get('jujuArr').removeObject(juju);
-    },
-    addJuju(juju) {
-      this.get('jujuArr').pushObject(juju);
-    },
-    updateJuju() {
-      this.get('model').update();
-    }
-  }
-});
-```
-
-#### Corrupt Bargain
-
-Even with this careful preparation, developers must still face several challenges. How do they resolve
-local changes post-update? How can they push local changes back onto the `RecordArray` itself? While
-these are not questions that this RFC answers, moving a step closer to "just Javascript" will help us
-to provide these answers in the future.
-
-One of the more frustrating aspects of `store.query` is all calls to it bypass the cache, yet it is the
- only method by which to make a request for a specific collection today via a store that touts caching as
- its selling point.  `store.query` is also the mandatory method to use if you want access to `links` and `meta`.
-
-The alternative to `store.query`, `store.findAll` comes with its own set of caveats.
-
-`findAll` returns the `live-array` result of `store.peekAll`, meaning that all known records of a
- type are included, in unreliable order, regardless of state.  Effectively, this makes the result of a request
- via `store.findAll` useless without an array computed and using `RecordArray.toArray().filter(() => {})`.
- This negates the benefits of the `live-array` as well as of `lazy-materialization` when relied upon,
- as it often is.
-
-`store.findAll` also cannot support `meta` and `links` and poorly supports `pagination`, because it is the agglomeration
- of all requests for records of a specific `type` via any find method or local creation.
-
-The `PromiseArray` and `RecordArray` proxies also introduce a great amount of friction when attempting
- to manage the state of a list on the client side. `PromiseArray`, while proxying to an array, does not
- itself have any of the methods of `Array` or Ember's `MutableArray` or `ArrayProxy` (such as `toArray`).
- `RecordArray` meanwhile extends `ArrayProxy` thus exposing `MutableArray` methods.  These methods differ
- from the methods available in Native JS arrays and contribute to the feeling that working with array data
- in Ember is not "just Javascript".
-
-Currently, app developers must first determine if they are working with the `PromiseArray`, the `RecordArray`,
- or the result of calling `toArray` to know how to access and manipulate the array. In the case of working with
- the native `Array` result of calling `toArray`, changes will not reflect back into record state and become
- difficult to manage or save, but working with `RecordArray` directly does not have clear guides or patterns
- established for managing membership and manipulating item order and saving these changes.
-
-
-
-
-### Ergonomic and performance benefits to be gained from a simpler mental model
-
-**TODO expand on these points**
-
-- aligning usage more closely with json-api principles enables us to provide more robust primitives
-- treating json-api documents as first-class citizens solves real-world problems with meta/links/errors/
-  collections that do not map as efficiently to records.
-- allows end users to more easily solve querying, caching, and updating edge cases on their own
-  - enable more advanced patterns, improve flexibility (membership, pagination, caching, meta)
-- no surprises, "just JS", easier to debug
-- separate the fetch from the current data
-- pave a path for improvements and simplifications across ember-data in single-resource and
-  relationship layer as well
-
-
-
+This RFC works to align just one `ember-data` concept with `json-api`, by replacing the `RecordArray` and
+  `AdapterPopulatedRecordArray` proxies with `Collection`, and unlocking the power of the `url` as a
+  cache-key. By doing so, we solve real-world problems with accessing `meta`, `links`, `errors` and
+  `Collections` that don't map directly to `Record`s.  We also allow app engineers to more easily solve
+  `querying`, `caching` and `updating` edge cases on their own, while substantially improving the ergonomics
+  of manging collection membership, `pagination`, and accessing `meta`.
 
 
 ## Detailed design
