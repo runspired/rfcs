@@ -102,7 +102,23 @@ class Store {
 }
 ```
 
-**TODO explain why fetchCollection and not findCollection, and details about shouldReload / shouldBackgroundReload support**
+`fetchCollection` represents the foundation for a re-imagining and simplification of the `finder` story
+  in `ember-data`. Today, each new scenario for finding requires new methods on the store, on adapters,
+  and significant internal plumbing. By relying on the `url`, and moving `url` to the forefront we can
+  trim the fat and avoid this bloat.  This focus on the url as well as the desire to remain true to the
+  `Just Javascript™` story is why we've chosen `fetchCollection` instead of `findCollection` for the name
+  of this new API.  With time, as a matching API for fetching single-resource documents is introduced,
+  we would drop `fetchCollection` in favor of a single `fetchDocument` or simply `fetch` API. Until then,
+  `Store.fetchCollection` will call out to a similarly named `Adapter.fetchCollection`.
+
+```ts
+class Adapter {
+  fetchCollection(url: String, options: Object): Promise<JSONAPIPayload> {}
+}
+```
+
+Available `options` would include support for `shouldReload` and `shouldBackgroundReload`. Query params
+for the request should already be included on the provided `url`.
 
 ### Pushing Collections
 
@@ -118,8 +134,6 @@ class Store {
   pushCollection(jsonApiDocument: Object): Collection {}
 }
 ```
-
-**TODO How does this fit into the Adapter interface without leading to more code bloat?**
 
 #### Collection Caching
 
@@ -176,23 +190,29 @@ users?
 
 ## Drawbacks
 
-#### Doesn't address relationships
-
-**TODO a bit about this**
-
-#### An End to Lazy Record Materialization
-
-**TODO explain why this is actually a good thing, even for perf**
-
-#### An End to promise-proxies
-
-**TODO explain why this is actually a good thing, even for templates**
+- `hasMany` Relationships are also essentially `collections`. However, their plumbing today is significantly different
+   from that of `RecordArray` and `AdapterPopulatedRecordArray`, and while a mirror API is desired, the specifics have
+   been omitted in favor of a separate RFC. This will lead to a short-term divergence in API design between the two.
+- We would no longer lazily materialize the records contained in a `Collection`. While this might have averse performance
+   ramifications for a few apps, it is arguable that unlike `hasMany` relationships, a fetched `Collection` is more
+   probably to be immediately consumed.  Additionally, the cost of materializing a record is something we are working
+   to pay-down, and should no longer be considered a deciding factor in API design. Lastly, because we would be creating
+   and managing fewer Array proxies there is a significant probability that any performance benefits lost are recovered.
+- We would no longer wrap return values in a proxy ala `PromiseArray` or `PromiseObject`. Some applications utilize
+   these promise-proxies to eagerly return available data from model hooks or fetch data from computed properties. Should
+   some users still require or desire this extra wrapper, they could easily wrap the `fetchCollection` promise on their own.
+   Everyone else would gain the benefit of clearer APIs.
+- Not everyone wants to learn json-api, and while it makes sense internally to ember-data aligning public APIs to mirror
+   it's structure could encounter some resistance. However, the issues this data structure resolves also helps make the 
+   case for why `json-api` is so well thought out. Building around a standard will be easier to teach than explaining an
+   ad-hoc new one.
 
 #### Perceived Churn
 
-The primary drawback to this RFC is perceived "deprecation churn". We must make a
-clear case for why this presents a better future, and how it fits into the comprehensive
-for ember-data's future.
+The primary drawback to this RFC is perceived "deprecation churn". While we believe this RFC presents early steps
+towards a simpler and more powerful core `ember-data` experience, it also introduces a series of concepts that
+would ultimately significantly change the recommended experience from the existing world. Below is a short list
+of changes this RFC precipitates:
 
 Deprecate-able methods:
 
@@ -226,13 +246,6 @@ API, and for building URLs / fetching data)
 
  - `RecordArray`
  - `AdapterPopulatedRecordArray`
- 
-#### JSON-API hesitation
-
-Not everyone wants to learn json-api, and while it makes sense internally to ember-data
-aligning public APIs to mirror it's structure could encounter some resistance. That said,
-the issues this data structure resolves also helps make the case for why json-api is
-so well thought out!
 
 ## Alternatives
 
