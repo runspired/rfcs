@@ -112,7 +112,7 @@ class Store {
 
 ```ts
 class Adapter {
-  fetchCollection(url: String, options: Object): Promise<JSONAPIPayload> {}
+  fetchCollection(url: String, options: Object): Promise<jsonApiDocument> {}
 }
 ```
 
