@@ -264,3 +264,6 @@ API, and for building URLs / fetching data)
    a url to `store.fetchCollection`
 - RFC for a simpler adapter/serializer model, reducing the method bloat seen today and separating
    core store concerns from the network layer.
+- While this RFC makes alterations to a collection possible, it provides no mechanism for tracking
+   changes or initiating a `save`. Should it? What would that even mean? Is it enough to let users
+   figure this out on their own?
