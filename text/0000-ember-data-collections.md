@@ -119,7 +119,7 @@ class Adapter {
 Available `options` would include support for `shouldReload` and `shouldBackgroundReload`. Query params
 for the request should already be included on the provided `url`.
 
-### Pushing Collections
+### Pushing Collections into the store
 
 Similarly, a new `push` method would be introduced to `DS.Store` for pushing a collection
 into the store.
@@ -164,7 +164,7 @@ specifics of this feature is outside the purview of this RFC, achieving such wit
 feature would be relatively simple given the ease of iterating pagination links, with the flexibility
 to handle any number of UX and Performance strategies.
 
-### No changes peekAll / No peekCollection
+### peeking a Collection
 
 This RFC considers changes to the behavior of `peekAll` to return a `Collection` instead of a `RecordArray`
  to be outside the scope of this RFC. It also declines to proffer a `peekCollection` API for checking
@@ -210,41 +210,14 @@ users?
 
 The primary drawback to this RFC is perceived "deprecation churn". While we believe this RFC presents early steps
 towards a simpler and more powerful core `ember-data` experience, it also introduces a series of concepts that
-would ultimately significantly change the recommended experience from the existing world. Below is a short list
-of changes this RFC precipitates:
+over time and in conjunction with other RFCs would change the expected experience including:
 
-Deprecate-able methods:
-
- - `store.findAll`
- - `store.query`
- - `Adapter.findAll`
- - `Adapter.query`
- 
-Deprecate-able intimate classes:
-
- - `FilteredRecordArray`
- - `PromiseArray`
- - `RecordArrayManager`
- 
-Internally, `CollectionManager` would replace `RecordArrayManager` to fulfill new requirements.
-
-Closer to being deprecate-able methods (once follow up RFCs have landed
-for aligning single-resources and relationships with the `Document` and `Collection`
-API, and for building URLs / fetching data)
-
- - `store.findByIds`
- - `store.findMany`
- - `store.findHasMany`
- - `Adapter.findByIds`
- - `Adapter.findMany`
- - `Adapter.findHasMany`
- - `store.find`
- - `store.filter` (already moved to addon and asserted, we should finish off removing this method, svelte!)
- 
- Closer to being deprecate-able intimate classes (once follow up RFCs have landed proposing new `peek` APIs)
-
- - `RecordArray`
- - `AdapterPopulatedRecordArray`
+- Treating the url as an `id` for the cache for some `Documents`
+- Separating out url-building from the adapter
+- Separating and clearly defining the boundary between adapter and store 
+- Replacing the explosion of find methods with a unified url-based fetch method
+- Conceptualizing api responses as `Documents` instead of single resources or arrays of resources.
+- reducing and eliminating proxies as possible
 
 ## Alternatives
 
@@ -265,4 +238,4 @@ API, and for building URLs / fetching data)
    core store concerns from the network layer.
 - While this RFC makes alterations to a collection possible, it provides no mechanism for tracking
    changes or initiating a `save`. Should it? What would that even mean? Is it enough to let users
-   figure this out on their own?
+   figure this out on their own? Adding a save API to collections could be done via RFC or addon.
