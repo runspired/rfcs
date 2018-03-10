@@ -12,20 +12,19 @@ Improve the ergonomics of fetching and operating on collection endpoints in embe
 
 ## Motivation
 
-The use of `RecordArray` and `PromiseArray` proxies have a great cost on the mental model
- required to use `ember-data`, and foment the impression that `Ember` is too complex and not 
- `Just Javascript™`.
+Users of `ember-data` struggle with proxies and promise-proxies: they don’t understand them and they don’t
+ know how to work with them.  Array proxies especially have a great cost on the mental model required to
+ use `ember-data`, and give the impression that `Ember` is too complex and not `Just Javascript™`.
 
-In addition to the mental overhead, these proxies have a significant performance cost as the proxy
- mechanism is expensive and these ember-data's proxy classes are constructed via a complex chain
- of inheritance.
+In addition to mental overhead, proxies have significant performance and complexity costs. The proxy 
+ mechanism is expensive and `ember-data` proxy classes are constructed via a complex chain of inheritance.
  
-Patterns used to work around the limitations of the proxies often introduce significant additional
+Patterns used to work around proxies such as `toArray` and `.content` often introduce significant additional
  mental and performance penalties.
 
-This RFC seeks to remove this painful ergonomic and performance experience by providing a 
- `Just Javascript™` primitive upon which application and addon developers can design more complex
- features.
+This RFC seeks to remove this painful ergonomic and performance experience by providing a lightweight solution that
+ doesn't involve Ember's object model or proxies as a primitive upon which application and addon developers can design
+ more complex features.
 
 ### A simpler primitive for the future
 
