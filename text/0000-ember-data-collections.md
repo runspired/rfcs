@@ -44,9 +44,8 @@ This RFC works to align just one `ember-data` concept with `json-api`, by replac
   `AdapterPopulatedRecordArray` proxies with `Collection`, and unlocking the power of the `url` as a
   cache-key. By doing so, we solve real-world problems with accessing `meta`, `links`, `errors` and
   `Collections` that don't map directly to `Record`s.  We also allow app engineers to more easily solve
-  `querying`, `caching` and `updating` edge cases on their own, while substantially improving the ergonomics
-  of manging collection membership, `pagination`, and accessing `meta`.
-
+  `querying`, `caching` and `updating` edge cases on their own, while providing better ergonomics
+  for manging collection membership, `pagination`, and accessing `meta`.
 
 ## Detailed design
 
@@ -130,7 +129,7 @@ Art exists [here](https://github.com/emberjs/rfcs/pull/161). and [here](https://
 
 ```ts
 class Store {
-  pushCollection(jsonApiDocument: Object): Collection {}
+  pushCollection(jsonApiDocument: Object): Promise<Collection> {}
 }
 ```
 
