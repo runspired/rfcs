@@ -77,14 +77,6 @@ class Document {
   private store;
 
   fetch(options: { requestOptions: Object, params: Object }): Promise<Document> {}
-  
-  next(): Promise<Collection> {}
-
-  prev(): Promise<Collection> {}
-  
-  first(): Promise<Collection> {}
-  
-  last(): Promise<Collection> {}
 }
 
 class Collection extends Document {
