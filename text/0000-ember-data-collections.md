@@ -2,13 +2,12 @@
 - RFC PR: (leave this empty)
 - Ember Issue: (leave this empty)
 
-# [WIP] Ember Data Collections
-
-**This RFC should be considered the roughest of rough drafts**
+# Ember Data Documents
 
 ## Summary
 
-Improve the ergonomics of fetching and operating on collection endpoints in ember-data.
+Improve the ergonomics of handling document-level information and of 
+fetching and operating on collection endpoints in ember-data.
 
 ## Motivation
 
@@ -60,22 +59,38 @@ abstract class Link {
 
 abstract class Links {
   self: String|Link
+}
+
+abstract class PaginationLinks extends Links {
   first?: String|Link
   last?: String|Link
   prev?: String|Link
   next?: String|Link
 }
 
-class Collection {
+class Document {
   public meta?: Object;
   public links: Links;
-  public data?: Array<Object>;
+  public data?: Object;
   public errors?: Object;
 
   private store;
 
-  fetch(options: { requestOptions: Object, params: Object }): Promise<Collection> {}
+  fetch(options: { requestOptions: Object, params: Object }): Promise<Document> {}
   
+  next(): Promise<Collection> {}
+
+  prev(): Promise<Collection> {}
+  
+  first(): Promise<Collection> {}
+  
+  last(): Promise<Collection> {}
+}
+
+class Collection extends Document {
+  public links: PaginationLinks;
+  public data?: Array<Object>;
+ 
   next(): Promise<Collection> {}
 
   prev(): Promise<Collection> {}
@@ -86,75 +101,84 @@ class Collection {
 }
 ```
 
-### Fetching Collections
+### Fetching Documents and Collections
 
-A new "finder" method would be introduced to `DS.Store` for requesting a collection.
-With this method in place, we would deprecate the `findAll` and `query` methods on `DS.Store`.
-
-*Note: This method would be eventually be deprecated in favor of a method with the same signature
-but allowing for fetching of single-resource documents as well.*
+A new "finder" method would be introduced to `DS.Store` for requesting a json-api document.
+Requests that return a `data` member containing an `Array` would return the `Collection` sub-class.
 
 ```ts
 class Store {
-  fetchCollection(url: String, options: Object): Promise<Collection> {}
+  fetchDocument(query: { url: String, cacheDocument: Boolean }, options: Object): Promise<Document> {}
 }
 ```
 
-`fetchCollection` represents the foundation for a re-imagining and simplification of the `finder` story
+// TODO the "query" aspect of this needs cleaned up, as does an explantion of `cacheDocument`.
+
+`fetchDocument` represents the foundation for a re-imagining and simplification of the `finder` story
   in `ember-data`. Today, each new scenario for finding requires new methods on the store, on adapters,
   and significant internal plumbing. By relying on the `url`, and moving `url` to the forefront we can
-  trim the fat and avoid this bloat.  This focus on the url as well as the desire to remain true to the
-  `Just Javascript™` story is why we've chosen `fetchCollection` instead of `findCollection` for the name
-  of this new API.  With time, as a matching API for fetching single-resource documents is introduced,
-  we would drop `fetchCollection` in favor of a single `fetchDocument` or simply `fetch` API. Until then,
-  `Store.fetchCollection` will call out to a similarly named `Adapter.fetchCollection`.
+  trim the fat and avoid this bloat, while still retaining the flexibility to pass queries.
+  
+  This focus on the url as well as the desire to remain true to the `Just Javascript™` story is why
+  we've chosen `fetchDocument` instead of `findDocument` for the name of this new API.
 
 ```ts
 class Adapter {
-  fetchCollection(url: String, options: Object): Promise<jsonApiDocument> {}
+  fetchDocument(query: { url: String, cacheDocument: Boolean }, options: Object): Promise<jsonApiDocument> {}
 }
 ```
 
 Available `options` would include support for `shouldReload` and `shouldBackgroundReload`. Query params
 for the request should already be included on the provided `url`.
 
-### Pushing Collections into the store
+### Pushing Documents into the store
 
-Similarly, a new `push` method would be introduced to `DS.Store` for pushing a collection
+Similarly, a new `push` method would be introduced to `DS.Store` for pushing a document
 into the store.
 
-*Note: This method would similarly be eventually deprecated in favor of a method with the same
-signature but allowing for the pushing of single-resource documents into the store as well. Prior
-Art exists [here](https://github.com/emberjs/rfcs/pull/161). and [here](https://github.com/emberjs/rfcs/pull/160)*
+* Prior Art exists [here](https://github.com/emberjs/rfcs/pull/161). and [here](https://github.com/emberjs/rfcs/pull/160)*
 
 ```ts
 class Store {
-  pushCollection(jsonApiDocument: Object): Promise<Collection> {}
+  pushDocument(jsonApiDocument: Object): Promise<Document> {}
 }
 ```
 
-#### Collection Caching
+#### Document Caching
 
-Collections would be cached by `url`, but with the same ability to bust the cache when
-fetching a specific collection as when finding a single `Record`, either by a flag when
-using `fetch` or by implementing the appropriate adapter hook (`shouldBackgroundRefresh` or
-`shouldRefresh`).
+Documents would be cached by `url` when `cacheDocument` is `true` (the default), but with the same
+ability to bust the cache when fetching a specific collection as when finding a single `Record`, 
+either by a flag when using `fetch` or by implementing the appropriate adapter hook
+ (`shouldBackgroundRefresh` or `shouldRefresh`).
 
-As an important note, a `Collection` need not have any `data`, and the available properties
-on a `Collection` MUST observe the rules of a [`json-api` Document](http://jsonapi.org/format/#document-top-level).
+As an important note, a `Document` need not have any `data`, and the available properties
+on a `Document` MUST observe the rules of a [`json-api` Document](http://jsonapi.org/format/#document-top-level).
 
 ```ts
-abstract class CollectionCache  {
-  [url: String]: Collection
+abstract class DocumentCache  {
+  [url: String]: Document
 }
 ```
 
 #### Pagination Support
 
-Because collections are cached by `URL`, and because `Links` are `URL`s, not only are pagination
-results easy to associate with each other, but are even cached as individual collections. Async
-iteration becomes possible by calling `collection.next()`, which returns a promise that resolves
-to the next collection in the list, or `null` if no `next` link is present in `Links`.
+**Simple Case**
+
+Because documents are cached by `URL`, and because `Links` are `URL`s, not only are pagination
+ results for collections easy to associate with each other, but are even cached as individual
+ collections. Async iteration becomes possible by calling `collection.next()`, which returns a 
+ promise that resolves to the next collection in the list, or `null` if no `next` link is present
+ in `Links`.
+
+**Complex Case**
+
+While query should always be serializable to a `url` (at least for cache key purposes) `links` may
+not be present for `next()` and `prev()` and similar methods, but enough data is likely present in
+the original `query` and `meta` for an app developer to formulate the correct request. We will want
+a story for generating a cacheKey to check for the presence of and a way to properly build the request
+to pass to `fetchDocument`.
+
+// TODO cache-key-for-request and fetch extension point
 
 ##### Managing the combined Pagination results of multiple Collections
 
@@ -170,6 +194,10 @@ This RFC considers changes to the behavior of `peekAll` to return a `Collection`
  for the existence of a collection locally.  For the time being, `fetchCollection` gives users the
  granular ability to decide whether to hit the network or not. Changes to the `peek` API ought to be
  scoped to a new RFC.
+ 
+### url-building
+
+- show url-builder helper pattern
 
 ## How we teach this
 
@@ -223,18 +251,14 @@ over time and in conjunction with other RFCs would change the expected experienc
 - Don't do this: Continued maintenance headaches and support requests around cache problems,
    pagination, manipulation, and proxy issues.
 - Land Collection as a private feature replacing parts of the internals, bring public over time.
-- **TODO is an addon feasible**
 
 ## Unresolved questions
 
 - ResourceIdentifier vs Resource membership in a Collection, json-api allows for collections
    of identifiers
-- META RFC or RFC Issue for presenting the comprehensive vision for `ember-data` into which
-   this RFC fits.
-- RFC for `buildURL()` potentially as `store.buildURL`, helper and how to use it to provide
-   a url to `store.fetchCollection`
 - RFC for a simpler adapter/serializer model, reducing the method bloat seen today and separating
    core store concerns from the network layer.
-- While this RFC makes alterations to a collection possible, it provides no mechanism for tracking
-   changes or initiating a `save`. Should it? What would that even mean? Is it enough to let users
-   figure this out on their own? Adding a save API to collections could be done via RFC or addon.
+- Is Collection membership immutable? Or do we allow untracked mutation? This RFC provides no
+  mechanism for tracking changes or initiating a `save`. Should it? What would that even mean?
+  Is it enough to let users figure this out on their own? Adding a save API to collections 
+  could be done via RFC or addon.
