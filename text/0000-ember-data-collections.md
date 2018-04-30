@@ -96,7 +96,8 @@ class Collection extends Document {
 ### Fetching Documents and Collections
 
 A new "finder" method would be introduced to `DS.Store` for requesting a json-api document.
-Requests that return a `data` member containing an `Array` would return the `Collection` sub-class.
+ Requests that return a document that contain an `Array` as their `data` member would 
+ resolve to a `Collection`.
 
 ```ts
 class Store {
@@ -104,7 +105,47 @@ class Store {
 }
 ```
 
-// TODO the "query" aspect of this needs cleaned up, as does an explantion of `cacheDocument`.
+This "finder" would be a "macro" for the following flow:
+
+```
+peek-cache => adapter-fetch => push-state => new Document()
+```
+
+e.g. something like this
+
+```js
+let document = store.peekDocument(query);
+
+if (!document) {
+  let adapter = store.adapterFor('application');
+  document = adapter.fetchDocument(query, options)
+    .then(jsonApiDocument => {
+      // TODO see discussion below of `cacheDocument`:  if not separate, pushDocument
+      //   would also require access to the `query`
+      // Pushing a document without materializing would be achieved by
+      //   pushing a document with `included` resources
+      return store.pushDocument(jsonApiDocument);
+    })
+    .then(document => {
+      // TODO just make this part of pushDocument?
+      //   By keeping it separate we keep clear the separation
+      //   However, if we have "forks" that are discardable this cache vs. non-cache question
+      //   Becomes pointless anyway and we would just always cache for that fork.
+      
+      // TODO caching by query is where moving the RFC from `url` to `query` begins to
+      //   break down a bit. Do we enforce that query has it's own `serialize` method?
+      //   do we enforce that `url` is a getter that serializes to a cache-key?
+      //   or something else similar?
+      if (query.cacheDocument) {
+        store.cacheDocument(query, document);
+      }
+
+      return document;
+    });
+}
+
+return Promise.resolve(document);
+```
 
 `fetchDocument` represents the foundation for a re-imagining and simplification of the `finder` story
   in `ember-data`. Today, each new scenario for finding requires new methods on the store, on adapters,
@@ -132,7 +173,7 @@ into the store.
 
 ```ts
 class Store {
-  pushDocument(jsonApiDocument: Object): Promise<Document> {}
+  pushDocument(query, jsonApiDocument: Object): Promise<Document> {}
 }
 ```
 
