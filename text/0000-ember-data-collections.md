@@ -161,8 +161,8 @@ class Adapter {
 }
 ```
 
-Available `options` would include support for `shouldReload` and `shouldBackgroundReload`. Query params
-for the request should already be included on the provided `url`.
+Available `options` would include support for `shouldReload` and `shouldBackgroundReload`. ~~Query params
+for the request should already be included on the provided `url`.~~
 
 ### Pushing Documents into the store
 
