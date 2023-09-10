@@ -298,7 +298,7 @@ async function doWork() {
   await scheduler.render();
   doExpensiveWork('renderAgain', 4)();
   await scheduler.layout();
-  bdoExpensiveWork('layout', 5)();
+  doExpensiveWork('layout', 5)();
   await scheduler.composite();
   doExpensiveWork('composite', 6)();
 }
