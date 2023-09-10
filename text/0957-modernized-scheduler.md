@@ -283,7 +283,13 @@ patterns to schedule some work.
 // puts some blocking named work into the performance profiler
 // to make it more obvious where the work was done and what work it was
 function doExpensiveWork(name, step) {
-  const fn = new Function(`return function ${name}() {const start = performance.now(); while (performance.now() - start < 10) {} console.log('${step}. ${name}');};`);
+  const fn = new Function(`
+    return function ${name}() {
+      const start = performance.now(); 
+      while (performance.now() - start < 10) {} 
+      console.log('${step}. ${name}');
+    };`
+  );
   return fn();
 }      
 
