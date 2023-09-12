@@ -78,7 +78,7 @@ will still exist, in the vast majority of cases instead of needing to learn and 
 "what is RSVP" and "what is Backburner" and "what is the Runloop" the solution is "just use a
 promise" or "just use async/await".
 
-### The Complex Answer: *Making Mutation Safer & Performance*
+### The Complex Answer: *Making Mutation Safer & Performant*
 
 As native promises, async/await usage, and raw fetch usage have become ever more prevalent,
 the benefits of a "unified" flush provided by Backburner and the Backburner/RSVP configuration
@@ -150,7 +150,7 @@ will go into the "next" Frame.
 
 Similar to `FrameTasks`, `ResizeTasks` are for `ResizeObserver` callbacks and `IntersectionTasks`
 are for `IntersectionObserver` callbacks. These queues can recursively schedule, though if
-too much recursion is encountered by a `ResizeObserver` is errors and tries again on the next frame.
+too much recursion is encountered by a `ResizeObserver` it errors and tries again on the next frame.
 
 ### Phases
 
@@ -171,7 +171,7 @@ We will discuss these phases in more depth below.
 ### Strategies
 
 We refer to an implementation of the scheduler interface as a `Strategy`. The
-strategy gets to shoose when each promise will resolve, and what happens if
+strategy gets to choose when each promise will resolve and what happens if
 say `render` is invoked while `layout` is flushing.
 
 ```ts
