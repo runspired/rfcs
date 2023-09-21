@@ -456,6 +456,30 @@ class extends Component {
 }
 ```
 
+an example of building a cancellation primitive
+```ts
+const cbs = new Map();
+
+function renderWithCancel(fn) {
+  let cancel = getToken();
+  cbs.add(cancel, fn);
+  
+  scheduleRender(cancel, fn);
+  return cancel;
+}
+
+async function scheduleRender(cancel, fn) {
+  await render();
+  if (!cbs.has(cancel)) return;
+  cbs.get(cancel)();
+}
+
+function cancelRender(token) {
+  cbs.delete(token);
+}
+```
+
+
 Libraries or the framework may desire to provide sugar for automated cleanup,
 and can do so over this much simpler primitive.
 
