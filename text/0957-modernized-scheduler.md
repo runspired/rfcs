@@ -150,7 +150,7 @@ will go into the "next" Frame.
 
 Similar to `FrameTasks`, `ResizeTasks` are for `ResizeObserver` callbacks and `IntersectionTasks`
 are for `IntersectionObserver` callbacks. These queues can recursively schedule, though if
-too much recursion is encountered by a `ResizeObserver` is errors and tries again on the next frame.
+too much recursion is encountered by a `ResizeObserver` it errors and tries again on the next frame.
 
 ### Phases
 
@@ -171,7 +171,7 @@ We will discuss these phases in more depth below.
 ### Strategies
 
 We refer to an implementation of the scheduler interface as a `Strategy`. The
-strategy gets to shoose when each promise will resolve, and what happens if
+strategy gets to choose when each promise will resolve, and what happens if
 say `render` is invoked while `layout` is flushing.
 
 ```ts
